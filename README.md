@@ -76,7 +76,7 @@ python3 -m venv .venv
 - Backend setup
 ```bash
 # install python requirements
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 - Add TINYFISH_API_KEY to environment
@@ -90,6 +90,23 @@ fastapi dev
 ```
 http://localhost:8000/docs
 ```
+
+Frontend Setup
+
+- Add NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 to environment
+
+- Install dependencies
+```bash
+npm i
+```
+
+- run frontend
+```bash
+npm run dev
+```
+
+- Visit http//:localhost:3000
+
 ## Demo flow
 
 1. Sign up
