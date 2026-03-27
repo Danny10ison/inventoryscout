@@ -15,3 +15,9 @@ env/
 
 # temp
 temp/
+
+#db files
+*.db
+*.sqlite
+*.sqlite3
+*.db.*
