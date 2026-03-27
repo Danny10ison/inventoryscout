@@ -139,7 +139,7 @@ export type CompetitorMonitoringRun = {
 };
 
 type ApiErrorPayload = {
-  detail?: string;
+  detail?: string | Array<Record<string, unknown>>;
   message?: string;
   error?: string;
 };
@@ -197,11 +197,21 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
       payload = null;
     }
 
-    const message =
-      payload?.detail ??
-      payload?.message ??
-      payload?.error ??
-      `Request failed with status ${response.status}`;
+    let message: string;
+
+    // Handle FastAPI validation error format (detail is an array)
+    if (Array.isArray(payload?.detail)) {
+      // Extract the first validation error message
+      const firstError = payload.detail[0] as Record<string, unknown>;
+      message = (firstError?.msg as string) || "Validation error";
+    } else {
+      // Handle standard error responses
+      message =
+        (typeof payload?.detail === "string" ? payload.detail : null) ??
+        payload?.message ??
+        payload?.error ??
+        `Request failed with status ${response.status}`;
+    }
 
     throw new InventoryScoutApiError(message, response.status);
   }
