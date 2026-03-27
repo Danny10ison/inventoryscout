@@ -1,0 +1,14 @@
+# python fastapi ignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd   
+
+# virtual environment   
+venv/
+env/
+.venv/
+.env/
+
+# env files
+*.env
