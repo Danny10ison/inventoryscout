@@ -58,27 +58,37 @@ It is used to visit pages, pull useful signals from them, and help turn those si
 
 ## Run the project
 
-### With Docker
+### Prerequisites
 
+1. Python 3.12
+2. Node 22.19
+3. NPM 11.11
+
+- Clone this repo
 ```bash
-docker-compose up --build
+git clone https://github.com/Danny10ison/inventoryscout.git
+```
+- create a virtual env
+```bash
+python3 -m venv .venv
 ```
 
-Then open:
+- Backend setup
+```bash
+# install python requirements
+pip install requirements.txt
+```
 
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
+- Run backend api
+```bash
+fastapi dev
+```
 
-## Current state
-
-This is an MVP.
-
-It already supports the main product flow, but it is still being improved in areas like testing, stronger auth, and better production readiness.
-
+- api docs
+```
+http://localhost:8000/docs
+```
 ## Demo flow
-
-The best quick demo is:
 
 1. Sign up
 2. Add one product
