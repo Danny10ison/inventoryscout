@@ -1,7 +1,12 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.integrations.tinyfish_client import TinyFishClient, TinyFishConfigurationError, TinyFishError
+from app.integrations.tinyfish_client import (
+    TinyFishClient,
+    TinyFishConfigurationError,
+    TinyFishError,
+    TinyFishTimeoutError,
+)
 from app.repositories.competitor_monitoring_repository import CompetitorMonitoringRepository
 from app.repositories.competitor_repository import CompetitorRepository
 from app.repositories.user_repository import UserRepository
@@ -13,7 +18,8 @@ from app.services.intelligence_pipeline import (
     determine_confidence_score,
     determine_data_freshness,
     determine_run_status,
-    ensure_string_list,
+    extract_payload_list,
+    extract_payload_text,
     summarize_source_health,
     utcnow,
 )
@@ -69,21 +75,7 @@ class CompetitorMonitoringService:
 
         try:
             raw_payload = TinyFishClient().run_automation(url=competitor.url, goal=goal)
-            normalized_payload = {
-                "summary": str(raw_payload.get("summary")).strip()
-                if str(raw_payload.get("summary", "")).strip()
-                else None,
-                "pricing_signal": str(raw_payload.get("pricing_signal")).strip()
-                if str(raw_payload.get("pricing_signal", "")).strip()
-                else None,
-                "alert_level": str(raw_payload.get("alert_level")).strip()
-                if str(raw_payload.get("alert_level", "")).strip()
-                else None,
-                "market_signals": ensure_string_list(raw_payload.get("market_signals", [])),
-                "trend_signals": ensure_string_list(raw_payload.get("trend_signals", [])),
-                "risks": ensure_string_list(raw_payload.get("risks", [])),
-                "recommendations": ensure_string_list(raw_payload.get("recommendations", [])),
-            }
+            normalized_payload = dict(raw_payload)
             return LiveSourceResult(
                 provider="tinyfish",
                 source_type="competitor_page",
@@ -103,6 +95,18 @@ class CompetitorMonitoringService:
                 raw_payload=None,
                 normalized_payload={},
                 error_code="provider_not_configured",
+                error_message=str(exc),
+            )
+        except TinyFishTimeoutError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="competitor_page",
+                source_url=str(competitor.url),
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_timeout",
                 error_message=str(exc),
             )
         except TinyFishError as exc:
@@ -138,18 +142,17 @@ class CompetitorMonitoringService:
         competitor = self._get_competitor_or_404(user_id, competitor_id)
         result = self._run_monitoring_extraction(competitor, monitoring_goal)
         evidence_results = [result]
-        payload = result.normalized_payload if result.status == "completed" else {}
+        payload = result.raw_payload if result.status == "completed" and isinstance(result.raw_payload, dict) else {}
 
-        market_signals = ensure_string_list(payload.get("market_signals", []))
-        trend_signals = ensure_string_list(payload.get("trend_signals", []))
-        risks = ensure_string_list(payload.get("risks", []))
-        recommendations = ensure_string_list(payload.get("recommendations", []))
-        pricing_signal = payload.get("pricing_signal") if isinstance(payload.get("pricing_signal"), str) else None
+        market_signals = extract_payload_list(payload, "market_signals")
+        trend_signals = extract_payload_list(payload, "trend_signals")
+        risks = extract_payload_list(payload, "risks")
+        recommendations = extract_payload_list(payload, "recommendations", "next_steps")
+        pricing_signal = extract_payload_text(payload, "pricing_signal")
 
         summary = (
-            str(payload.get("summary")).strip()
-            if isinstance(payload.get("summary"), str) and str(payload.get("summary", "")).strip()
-            else f"Monitoring run captured current market signals for {competitor.name}."
+            extract_payload_text(payload, "summary")
+            or f"TinyFish could not complete monitoring for {competitor.name}. {result.error_message or 'No completed response was returned.'}"
         )
 
         sources_used, sources_failed = summarize_source_health(evidence_results)
@@ -170,8 +173,9 @@ class CompetitorMonitoringService:
             round((pricing_change_score + market_activity_score + risk_score) / 3)
         )
 
-        if isinstance(payload.get("alert_level"), str) and str(payload.get("alert_level", "")).strip():
-            alert_level = str(payload.get("alert_level")).strip().title()
+        payload_alert_level = extract_payload_text(payload, "alert_level")
+        if payload_alert_level:
+            alert_level = payload_alert_level.title()
         elif overall_score >= 75:
             alert_level = "High"
         elif overall_score >= 50:

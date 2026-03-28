@@ -28,6 +28,38 @@ def ensure_string_list(value: object) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def extract_payload_text(payload: dict[str, object], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def extract_payload_list(payload: dict[str, object], *keys: str) -> list[str]:
+    for key in keys:
+        value = payload.get(key)
+        extracted = ensure_string_list(value)
+        if extracted:
+            return extracted
+    return []
+
+
+def get_completed_payloads(results: list[LiveSourceResult]) -> list[dict[str, object]]:
+    return [
+        result.raw_payload
+        for result in results
+        if result.status == "completed" and isinstance(result.raw_payload, dict)
+    ]
+
+
+def first_error_message(results: list[LiveSourceResult]) -> str | None:
+    for result in results:
+        if result.error_message:
+            return result.error_message.strip()
+    return None
+
+
 def clamp_score(value: int) -> int:
     return max(0, min(100, value))
 
@@ -49,7 +81,7 @@ def determine_run_status(results: list[LiveSourceResult], *, minimum_completed_s
         return "completed"
     if completed_count > 0:
         return "partial"
-    return "partial" if results else "failed"
+    return "failed"
 
 
 def determine_data_freshness(results: list[LiveSourceResult]) -> str:

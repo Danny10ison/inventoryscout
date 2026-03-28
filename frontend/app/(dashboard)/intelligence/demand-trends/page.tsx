@@ -16,6 +16,29 @@ type ProductInsight = {
   analysis: ProductAnalysis | null;
 };
 
+function formatAnalysisStatus(analysis: ProductAnalysis | null) {
+  if (!analysis) {
+    return "not run";
+  }
+  if (analysis.status === "failed") {
+    return "failed";
+  }
+  if (analysis.status === "partial") {
+    return "partial";
+  }
+  return analysis.status;
+}
+
+function getAnalysisFailureReason(analysis: ProductAnalysis | null) {
+  if (!analysis || analysis.sources_failed.length === 0) {
+    return null;
+  }
+  if (analysis.sources_failed.some((source) => source.includes("provider_timeout"))) {
+    return "TinyFish timed out before returning a completed response.";
+  }
+  return "TinyFish could not complete every requested source.";
+}
+
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -131,7 +154,7 @@ export default function DemandTrendsPage() {
                     </p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
-                    {analysis?.status ?? "not run"}
+                    {formatAnalysisStatus(analysis)}
                   </span>
                 </div>
 
@@ -140,6 +163,17 @@ export default function DemandTrendsPage() {
                     <p className="mt-4 text-sm leading-6 text-slate-600">
                       {analysis.summary}
                     </p>
+
+                    {getAnalysisFailureReason(analysis) ? (
+                      <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700">
+                          Live Run Status
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-rose-900">
+                          {getAnalysisFailureReason(analysis)}
+                        </p>
+                      </div>
+                    ) : null}
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl bg-slate-50 p-3">

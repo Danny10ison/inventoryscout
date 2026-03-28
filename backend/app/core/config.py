@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     tinyfish_api_key: str | None = None
     tinyfish_base_url: str = "https://agent.tinyfish.ai"
-    tinyfish_timeout_seconds: int = 60
     tinyfish_browser_profile: str = "lite"
     tinyfish_proxy_enabled: bool = False
     tinyfish_proxy_country_code: str = "US"

@@ -27,6 +27,29 @@ type ProductWithAnalysis = {
   latestAnalysis: ProductAnalysis | null;
 };
 
+function formatAnalysisStatus(analysis: ProductAnalysis | null) {
+  if (!analysis) {
+    return "not run";
+  }
+  if (analysis.status === "failed") {
+    return "failed";
+  }
+  if (analysis.status === "partial") {
+    return "partial";
+  }
+  return analysis.status;
+}
+
+function getAnalysisFailureReason(analysis: ProductAnalysis | null) {
+  if (!analysis || analysis.sources_failed.length === 0) {
+    return null;
+  }
+  if (analysis.sources_failed.some((source) => source.includes("provider_timeout"))) {
+    return "TinyFish timed out before returning a completed response.";
+  }
+  return "TinyFish could not complete every requested source.";
+}
+
 export default function ProductInsightsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -230,7 +253,7 @@ export default function ProductInsightsPage() {
                         <tr key={product.id}>
                           <td className="px-4 py-3 text-slate-800">{product.name}</td>
                           <td className="px-4 py-3 text-slate-700">
-                            {latestAnalysis?.status ?? "not run"}
+                            {formatAnalysisStatus(latestAnalysis)}
                           </td>
                           <td className="px-4 py-3 text-slate-700">
                             {latestAnalysis?.demand_score ?? "-"}
@@ -306,6 +329,17 @@ export default function ProductInsightsPage() {
                         <p className="mt-4 text-sm leading-6 text-slate-600">
                           {latestAnalysis.summary}
                         </p>
+
+                        {getAnalysisFailureReason(latestAnalysis) ? (
+                          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700">
+                              Live Run Status
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-rose-900">
+                              {getAnalysisFailureReason(latestAnalysis)}
+                            </p>
+                          </div>
+                        ) : null}
 
                         <div className="mt-4 space-y-2 text-sm text-slate-600">
                           {latestAnalysis.value_proposition ? (

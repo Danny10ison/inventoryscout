@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 from urllib.parse import quote_plus
 
 from app.repositories.competitor_repository import CompetitorRepository
-from app.integrations.tinyfish_client import TinyFishClient, TinyFishConfigurationError, TinyFishError
+from app.integrations.tinyfish_client import (
+    TinyFishClient,
+    TinyFishConfigurationError,
+    TinyFishError,
+    TinyFishTimeoutError,
+)
 from app.repositories.product_analysis_repository import ProductAnalysisRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.user_repository import UserRepository
@@ -17,6 +22,10 @@ from app.services.intelligence_pipeline import (
     determine_data_freshness,
     determine_run_status,
     ensure_string_list,
+    extract_payload_list,
+    extract_payload_text,
+    first_error_message,
+    get_completed_payloads,
     summarize_source_health,
     utcnow,
 )
@@ -86,19 +95,7 @@ class ProductAnalysisService:
 
         try:
             raw_payload = TinyFishClient().run_automation(url=competitor.url, goal=goal)
-            normalized_payload = {
-                "summary": str(raw_payload.get("summary")).strip()
-                if str(raw_payload.get("summary", "")).strip()
-                else None,
-                "value_proposition": str(raw_payload.get("value_proposition")).strip()
-                if str(raw_payload.get("value_proposition", "")).strip()
-                else None,
-                "key_features": ensure_string_list(raw_payload.get("key_features", [])),
-                "demand_signals": ensure_string_list(raw_payload.get("demand_signals", [])),
-                "trend_signals": ensure_string_list(raw_payload.get("trend_signals", [])),
-                "competitive_signals": ensure_string_list(raw_payload.get("competitive_signals", [])),
-                "risks": ensure_string_list(raw_payload.get("risks", [])),
-            }
+            normalized_payload = dict(raw_payload)
             return LiveSourceResult(
                 provider="tinyfish",
                 source_type="competitor_page",
@@ -118,6 +115,18 @@ class ProductAnalysisService:
                 raw_payload=None,
                 normalized_payload={},
                 error_code="provider_not_configured",
+                error_message=str(exc),
+            )
+        except TinyFishTimeoutError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="competitor_page",
+                source_url=str(competitor.url),
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_timeout",
                 error_message=str(exc),
             )
         except TinyFishError as exc:
@@ -161,19 +170,7 @@ class ProductAnalysisService:
 
         try:
             raw_payload = TinyFishClient().run_automation(url=search_url, goal=goal)
-            normalized_payload = {
-                "summary": str(raw_payload.get("summary")).strip()
-                if str(raw_payload.get("summary", "")).strip()
-                else None,
-                "value_proposition": str(raw_payload.get("value_proposition")).strip()
-                if str(raw_payload.get("value_proposition", "")).strip()
-                else None,
-                "key_features": ensure_string_list(raw_payload.get("key_features", [])),
-                "demand_signals": ensure_string_list(raw_payload.get("demand_signals", [])),
-                "trend_signals": ensure_string_list(raw_payload.get("trend_signals", [])),
-                "competitive_signals": ensure_string_list(raw_payload.get("competitive_signals", [])),
-                "risks": ensure_string_list(raw_payload.get("risks", [])),
-            }
+            normalized_payload = dict(raw_payload)
             return LiveSourceResult(
                 provider="tinyfish",
                 source_type="market_search",
@@ -193,6 +190,18 @@ class ProductAnalysisService:
                 raw_payload=None,
                 normalized_payload={},
                 error_code="provider_not_configured",
+                error_message=str(exc),
+            )
+        except TinyFishTimeoutError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="market_search",
+                source_url=search_url,
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_timeout",
                 error_message=str(exc),
             )
         except TinyFishError as exc:
@@ -228,15 +237,13 @@ class ProductAnalysisService:
         has_category = bool(product.category and product.category.strip())
         completeness_score = sum([has_description, has_category])
 
-        completed_payloads = [
-            result.normalized_payload for result in evidence_results if result.status == "completed"
-        ]
+        completed_payloads = get_completed_payloads(evidence_results)
 
         demand_signals = list(
             dict.fromkeys(
                 str(item).strip()
                 for payload_item in completed_payloads
-                for item in ensure_string_list(payload_item.get("demand_signals", []))
+                for item in extract_payload_list(payload_item, "demand_signals")
                 if str(item).strip()
             )
         )
@@ -244,7 +251,7 @@ class ProductAnalysisService:
             dict.fromkeys(
                 str(item).strip()
                 for payload_item in completed_payloads
-                for item in ensure_string_list(payload_item.get("trend_signals", []))
+                for item in extract_payload_list(payload_item, "trend_signals")
                 if str(item).strip()
             )
         )
@@ -252,7 +259,7 @@ class ProductAnalysisService:
             dict.fromkeys(
                 str(item).strip()
                 for payload_item in completed_payloads
-                for item in ensure_string_list(payload_item.get("competitive_signals", []))
+                for item in extract_payload_list(payload_item, "competitive_signals", "market_signals", "differentiators")
                 if str(item).strip()
             )
         )
@@ -260,24 +267,23 @@ class ProductAnalysisService:
             dict.fromkeys(
                 str(item).strip()
                 for payload_item in completed_payloads
-                for item in ensure_string_list(payload_item.get("risks", []))
+                for item in extract_payload_list(payload_item, "risks")
                 if str(item).strip()
             )
         )
         extracted_summary = next(
             (
-                payload_item.get("summary")
+                extract_payload_text(payload_item, "summary")
                 for payload_item in completed_payloads
-                if isinstance(payload_item.get("summary"), str) and str(payload_item.get("summary")).strip()
+                if extract_payload_text(payload_item, "summary")
             ),
             None,
         )
         value_proposition = next(
             (
-                payload_item.get("value_proposition")
+                extract_payload_text(payload_item, "value_proposition", "positioning")
                 for payload_item in completed_payloads
-                if isinstance(payload_item.get("value_proposition"), str)
-                and str(payload_item.get("value_proposition")).strip()
+                if extract_payload_text(payload_item, "value_proposition", "positioning")
             ),
             None,
         )
@@ -285,7 +291,7 @@ class ProductAnalysisService:
             dict.fromkeys(
                 str(item).strip()
                 for payload_item in completed_payloads
-                for item in ensure_string_list(payload_item.get("key_features", []))
+                for item in extract_payload_list(payload_item, "key_features", "differentiators")
                 if str(item).strip()
             )
         )
@@ -328,8 +334,15 @@ class ProductAnalysisService:
         else:
             market_readiness = "Early"
 
+        error_message = first_error_message(evidence_results)
+
         if extracted_summary:
             summary = str(extracted_summary).strip()
+        elif not completed_payloads:
+            summary = (
+                f"TinyFish could not complete a live analysis for {product.name}. "
+                f"{error_message or 'All requested sources failed before returning a result.'}"
+            )
         elif competitors:
             summary = (
                 f"{product.name} was assessed against {len(competitors)} saved competitor "
@@ -368,8 +381,10 @@ class ProductAnalysisService:
         if not completed_payloads:
             risks.insert(
                 0,
-                "Live product extraction did not fully complete, so this run is only partially backed by external evidence.",
+                "TinyFish did not return a completed live analysis, so this run is backed by failure metadata rather than market evidence.",
             )
+            if error_message:
+                risks.insert(1, error_message)
         else:
             risks.extend(str(risk) for risk in extracted_risks[:3] if str(risk).strip())
         next_steps = [
@@ -382,7 +397,12 @@ class ProductAnalysisService:
             next_steps.insert(0, "Add saved competitors if you want direct side-by-side checks instead of search-based market discovery.")
 
         goal_suffix = f" Focus area: {payload.analysis_goal}." if payload.analysis_goal else ""
-        if not competitors:
+        if not completed_payloads:
+            recommendation = (
+                "Retry this run after confirming the competitor URLs point to reachable product or search pages."
+                f"{goal_suffix}"
+            )
+        elif not competitors:
             recommendation = (
                 "This run used TinyFish web search to inspect top market results. Add saved competitors for tighter side-by-side checks."
                 f"{goal_suffix}"

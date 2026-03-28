@@ -27,6 +27,29 @@ type ProductCompetitorAnalysis = {
   latestAnalysis: CompetitorAnalysis | null;
 };
 
+function formatAnalysisStatus(analysis: CompetitorAnalysis | null) {
+  if (!analysis) {
+    return "not run";
+  }
+  if (analysis.status === "failed") {
+    return "failed";
+  }
+  if (analysis.status === "partial") {
+    return "partial";
+  }
+  return analysis.status;
+}
+
+function getAnalysisFailureReason(analysis: CompetitorAnalysis | null) {
+  if (!analysis || analysis.sources_failed.length === 0) {
+    return null;
+  }
+  if (analysis.sources_failed.some((source) => source.includes("provider_timeout"))) {
+    return "TinyFish timed out before returning a completed comparison.";
+  }
+  return "TinyFish could not complete every competitor source.";
+}
+
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -334,7 +357,7 @@ export default function PriceTrendsPage() {
                       </p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
-                      {latestAnalysis?.status ?? "not run"}
+                      {formatAnalysisStatus(latestAnalysis)}
                     </span>
                   </div>
 
@@ -355,6 +378,17 @@ export default function PriceTrendsPage() {
                       <p className="mt-4 text-sm leading-6 text-slate-600">
                         {latestAnalysis.summary}
                       </p>
+
+                      {getAnalysisFailureReason(latestAnalysis) ? (
+                        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700">
+                            Live Run Status
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-rose-900">
+                            {getAnalysisFailureReason(latestAnalysis)}
+                          </p>
+                        </div>
+                      ) : null}
 
                       <p className="mt-3 text-sm text-slate-600">
                         Compared against{" "}

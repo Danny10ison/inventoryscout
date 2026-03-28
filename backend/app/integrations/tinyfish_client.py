@@ -24,6 +24,10 @@ class TinyFishConfigurationError(TinyFishError):
     pass
 
 
+class TinyFishTimeoutError(TinyFishError):
+    pass
+
+
 class TinyFishClient:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -38,7 +42,6 @@ class TinyFishClient:
         self._client_kwargs = {
             "api_key": self.settings.tinyfish_api_key,
             "base_url": self.base_url,
-            "timeout": float(self.settings.tinyfish_timeout_seconds),
             "max_retries": 0,
         }
         integration = (self.settings.tinyfish_api_integration or "").strip()
@@ -91,7 +94,10 @@ class TinyFishClient:
                 proxy_config=self._proxy_config,
             )
         except SDKError as exc:
-            raise TinyFishError(str(exc)) from exc
+            message = str(exc)
+            if "timed out" in message.lower() or "timeout" in message.lower():
+                raise TinyFishTimeoutError(message) from exc
+            raise TinyFishError(message) from exc
         finally:
             client.close()
 

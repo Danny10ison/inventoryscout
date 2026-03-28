@@ -1,7 +1,12 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.integrations.tinyfish_client import TinyFishClient, TinyFishConfigurationError, TinyFishError
+from app.integrations.tinyfish_client import (
+    TinyFishClient,
+    TinyFishConfigurationError,
+    TinyFishError,
+    TinyFishTimeoutError,
+)
 from app.repositories.competitor_analysis_repository import CompetitorAnalysisRepository
 from app.repositories.competitor_repository import CompetitorRepository
 from app.repositories.product_repository import ProductRepository
@@ -15,7 +20,10 @@ from app.services.intelligence_pipeline import (
     determine_confidence_score,
     determine_data_freshness,
     determine_run_status,
-    ensure_string_list,
+    extract_payload_list,
+    extract_payload_text,
+    first_error_message,
+    get_completed_payloads,
     summarize_source_health,
     utcnow,
 )
@@ -82,21 +90,7 @@ class CompetitorAnalysisService:
 
         try:
             raw_payload = TinyFishClient().run_automation(url=competitor.url, goal=goal)
-            normalized_payload = {
-                "summary": str(raw_payload.get("summary")).strip()
-                if str(raw_payload.get("summary", "")).strip()
-                else None,
-                "positioning": str(raw_payload.get("positioning")).strip()
-                if str(raw_payload.get("positioning", "")).strip()
-                else None,
-                "pricing_signal": str(raw_payload.get("pricing_signal")).strip()
-                if str(raw_payload.get("pricing_signal", "")).strip()
-                else None,
-                "differentiators": ensure_string_list(raw_payload.get("differentiators", [])),
-                "risks": ensure_string_list(raw_payload.get("risks", [])),
-                "trend_signals": ensure_string_list(raw_payload.get("trend_signals", [])),
-                "market_signals": ensure_string_list(raw_payload.get("market_signals", [])),
-            }
+            normalized_payload = dict(raw_payload)
             return LiveSourceResult(
                 provider="tinyfish",
                 source_type="competitor_page",
@@ -116,6 +110,18 @@ class CompetitorAnalysisService:
                 raw_payload=None,
                 normalized_payload={},
                 error_code="provider_not_configured",
+                error_message=str(exc),
+            )
+        except TinyFishTimeoutError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="competitor_page",
+                source_url=str(competitor.url),
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_timeout",
                 error_message=str(exc),
             )
         except TinyFishError as exc:
@@ -153,40 +159,42 @@ class CompetitorAnalysisService:
             self._extract_competitor_signal(product, competitor, payload.analysis_goal)
             for competitor in competitors
         ]
-        successful_results = [result for result in evidence_results if result.status == "completed"]
+        completed_payloads = get_completed_payloads(evidence_results)
 
         pricing_signals = [
-            str(result.normalized_payload.get("pricing_signal")).strip()
-            for result in successful_results
-            if str(result.normalized_payload.get("pricing_signal", "")).strip()
+            str(item).strip()
+            for payload_item in completed_payloads
+            for item in [extract_payload_text(payload_item, "pricing_signal")]
+            if isinstance(item, str) and item.strip()
         ]
         positionings = [
-            str(result.normalized_payload.get("positioning")).strip()
-            for result in successful_results
-            if str(result.normalized_payload.get("positioning", "")).strip()
+            str(item).strip()
+            for payload_item in completed_payloads
+            for item in [extract_payload_text(payload_item, "positioning", "summary")]
+            if isinstance(item, str) and item.strip()
         ]
         differentiators = [
             str(item).strip()
-            for result in successful_results
-            for item in ensure_string_list(result.normalized_payload.get("differentiators", []))[:2]
+            for payload_item in completed_payloads
+            for item in extract_payload_list(payload_item, "differentiators", "key_features")[:2]
             if str(item).strip()
         ]
         market_signals = [
             str(item).strip()
-            for result in successful_results
-            for item in ensure_string_list(result.normalized_payload.get("market_signals", []))[:2]
+            for payload_item in completed_payloads
+            for item in extract_payload_list(payload_item, "market_signals", "competitive_signals", "demand_signals")[:2]
             if str(item).strip()
         ]
         trend_signals = [
             str(item).strip()
-            for result in successful_results
-            for item in ensure_string_list(result.normalized_payload.get("trend_signals", []))[:2]
+            for payload_item in completed_payloads
+            for item in extract_payload_list(payload_item, "trend_signals")[:2]
             if str(item).strip()
         ]
         extracted_risks = [
             str(item).strip()
-            for result in successful_results
-            for item in ensure_string_list(result.normalized_payload.get("risks", []))[:2]
+            for payload_item in completed_payloads
+            for item in extract_payload_list(payload_item, "risks")[:2]
             if str(item).strip()
         ]
         sources_used, sources_failed = summarize_source_health(evidence_results)
@@ -200,17 +208,24 @@ class CompetitorAnalysisService:
         data_freshness = determine_data_freshness(evidence_results)
         run_status = determine_run_status(evidence_results)
 
-        if successful_results:
+        extracted_summary = next(
+            (extract_payload_text(payload_item, "summary") for payload_item in completed_payloads if extract_payload_text(payload_item, "summary")),
+            None,
+        )
+        error_message = first_error_message(evidence_results)
+        if extracted_summary:
+            summary = extracted_summary
+        elif completed_payloads:
             summary = (
                 f"{product.name} was compared against {len(competitors)} competitor"
                 f"{'' if len(competitors) == 1 else 's'} with live page extraction from "
-                f"{len(successful_results)} source{'s' if len(successful_results) != 1 else ''}: "
+                f"{len(completed_payloads)} source{'s' if len(completed_payloads) != 1 else ''}: "
                 f"{', '.join(competitor_names)}."
             )
         else:
             summary = (
-                f"{product.name} was compared against {len(competitors)} competitor"
-                f"{'' if len(competitors) == 1 else 's'}: {', '.join(competitor_names)}."
+                f"TinyFish could not complete competitor analysis for {product.name}. "
+                f"{error_message or 'All competitor sources failed before returning a result.'}"
             )
 
         signal_count = len(pricing_signals) + len(market_signals) + len(trend_signals)
@@ -239,17 +254,22 @@ class CompetitorAnalysisService:
         risks = [
             "Competitor URLs may change structure, which can affect automated extraction later.",
         ]
-        if successful_results:
+        if completed_payloads:
             risks.extend(extracted_risks[:2])
         else:
-            risks.append("Live competitor extraction was unavailable, so this run has limited external evidence.")
+            risks.append("TinyFish did not return a completed competitor analysis, so this run has limited external evidence.")
+            if error_message:
+                risks.append(error_message)
         if sources_failed:
             risks.append("Some competitor sources failed, so pricing and positioning coverage is incomplete.")
 
-        recommendation = (
-            f"Prioritize comparing {product.name} against {competitor_names[0]} first, "
-            "then use the strongest pricing and market signals to refine positioning."
-        )
+        if completed_payloads:
+            recommendation = (
+                f"Prioritize comparing {product.name} against {competitor_names[0]} first, "
+                "then use the strongest pricing and market signals to refine positioning."
+            )
+        else:
+            recommendation = "Retry with direct competitor product or search URLs so TinyFish can return a usable comparison."
 
         competition_score = clamp_score(25 + (len(competitors) * 10) + (len(market_signals) * 8))
         positioning_score = clamp_score(
