@@ -82,7 +82,7 @@ export default function DemandTrendsPage() {
       <PageHeader
         badge="Intelligence"
         title="Demand Signals"
-        description="This page gives you a quick read on which saved products look stronger and which ones still need more proof."
+        description="Latest demand read."
       />
 
       <MetricCards
@@ -161,6 +161,11 @@ export default function DemandTrendsPage() {
                     </div>
 
                     <div className="mt-4 space-y-2 text-sm text-slate-600">
+                      {analysis.value_proposition ? (
+                        <p>
+                          Value proposition: <span className="font-medium text-slate-900">{analysis.value_proposition}</span>
+                        </p>
+                      ) : null}
                       <p>
                         Demand outlook: <span className="font-medium text-slate-900">{analysis.demand_outlook}</span>
                       </p>
@@ -175,9 +180,31 @@ export default function DemandTrendsPage() {
                       </p>
                     </div>
 
+                    {analysis.demand_signals.length > 0 ? (
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Demand Signals
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {analysis.demand_signals.join(" • ")}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {analysis.trend_signals.length > 0 ? (
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Trend Signals
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {analysis.trend_signals.join(" • ")}
+                        </p>
+                      </div>
+                    ) : null}
+
                     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                        Recommendation
+                        Next
                       </p>
                       <p className="mt-2 text-sm leading-6 text-emerald-900">
                         {analysis.recommendation}

@@ -18,7 +18,6 @@ from app.models import (
 
 settings = get_settings()
 
-# API Metadata
 app = FastAPI(
     title=settings.app_name,
     description="""
@@ -98,7 +97,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Custom Exception Handler (Optional but pro)
 @app.exception_handler(Exception)
 def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
@@ -111,11 +109,6 @@ def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
 
 app.include_router(api_router)
 
-# @app.get("/")
-# def root():
-#     return {"message": "InventoryScout API is running"}
-
-# Root Endpoint (Branded)
 @app.get("/", tags=["Root"])
 def root():
     return {

@@ -29,26 +29,17 @@ class ProductRepository:
             .first()
         )
 
-    def get_by_user_and_url(self, user_id: int, url: str) -> Product | None:
-        return (
-            self.db.query(Product)
-            .filter(Product.user_id == user_id, Product.url == url)
-            .first()
-        )
-
     def create(
         self,
         *,
         user_id: int,
         name: str,
-        url: str | None,
         category: str | None,
         description: str | None,
     ) -> Product:
         product = Product(
             user_id=user_id,
             name=name,
-            url=url,
             category=category,
             description=description,
         )

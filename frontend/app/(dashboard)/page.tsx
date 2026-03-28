@@ -248,7 +248,7 @@ export default function DashboardHomePage() {
       <PageHeader
         badge="InventoryScout"
         title="Know Which Product To Back Next"
-        description="InventoryScout helps you save a product idea, check competing brands, run AI reviews, and decide what looks promising before you commit time or money."
+        description="Your latest product and competitor signals."
       />
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}

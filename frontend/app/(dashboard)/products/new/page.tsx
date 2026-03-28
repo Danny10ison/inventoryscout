@@ -20,7 +20,6 @@ type NewProductFormState = {
   name: string;
   mainCategory: string;
   subcategory: string;
-  url: string;
   description: string;
 };
 
@@ -31,7 +30,6 @@ export default function AddProductPage() {
     name: "",
     mainCategory: "",
     subcategory: "",
-    url: "",
     description: "",
   });
   const [isLoadingUser, setIsLoadingUser] = useState(true);
@@ -89,7 +87,6 @@ export default function AddProductPage() {
         name: form.name.trim(),
         category:
           combineCategory(form.mainCategory, form.subcategory) || null,
-        url: form.url.trim() || null,
         description: form.description.trim() || null,
       });
       router.push("/products");
@@ -162,15 +159,6 @@ export default function AddProductPage() {
               </select>
             </label>
             <label className="block lg:col-span-2">
-              <span className="text-sm font-medium text-slate-700">Product URL</span>
-              <input
-                value={form.url}
-                onChange={handleChange("url")}
-                placeholder="Paste the product page if you have one"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:bg-white"
-              />
-            </label>
-            <label className="block lg:col-span-2">
               <span className="text-sm font-medium text-slate-700">Description</span>
               <textarea
                 value={form.description}
@@ -181,11 +169,6 @@ export default function AddProductPage() {
             </label>
 
             {error ? <p className="text-sm text-rose-600 lg:col-span-2">{error}</p> : null}
-
-            <p className="text-sm leading-6 text-slate-500 lg:col-span-2">
-              A stronger product record usually leads to a stronger AI result.
-              If you have a product page and a short description, add both.
-            </p>
 
             <div className="flex flex-wrap gap-3 lg:col-span-2">
               <button

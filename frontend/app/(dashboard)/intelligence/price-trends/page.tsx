@@ -10,9 +10,11 @@ import {
 import {
   Competitor,
   CompetitorAnalysis,
+  CompetitorMonitoringRun,
   ensureAuthenticatedUser,
   InventoryScoutApiError,
   listCompetitorAnalyses,
+  listCompetitorMonitoringRuns,
   listCompetitors,
   listProducts,
   Product,
@@ -39,6 +41,7 @@ export default function PriceTrendsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [analysisRecords, setAnalysisRecords] = useState<ProductCompetitorAnalysis[]>([]);
+  const [latestMonitoringRuns, setLatestMonitoringRuns] = useState<CompetitorMonitoringRun[]>([]);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<number[]>([]);
   const [selectedGoal, setSelectedGoal] = useState(
@@ -69,10 +72,22 @@ export default function PriceTrendsPage() {
           }),
         );
 
+        const monitoringRuns = await Promise.all(
+          savedCompetitors.map(async (competitor) => {
+            const runs = await listCompetitorMonitoringRuns(currentUser.id, competitor.id);
+            return runs[0] ?? null;
+          }),
+        );
+
         setUser(currentUser);
         setProducts(savedProducts);
         setCompetitors(savedCompetitors);
         setAnalysisRecords(latestAnalyses);
+        setLatestMonitoringRuns(
+          monitoringRuns.filter(
+            (run): run is CompetitorMonitoringRun => run !== null,
+          ),
+        );
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -148,12 +163,16 @@ export default function PriceTrendsPage() {
         )
       : 0;
 
+  const competitorNameById = new Map(
+    competitors.map((competitor) => [competitor.id, competitor.name]),
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
         badge="Intelligence"
         title="Competitor Analysis"
-        description="Choose one saved product and a few saved competitors to see where the market looks crowded, risky, or worth deeper review."
+        description="Compare a product against saved competitors."
       />
 
       <MetricCards
@@ -183,8 +202,7 @@ export default function PriceTrendsPage() {
             {feedback ? <p className="text-sm text-emerald-600">{feedback}</p> : null}
 
             <p className="text-sm leading-6 text-slate-600">
-              This is the fastest way to answer a simple question: how tough
-              does this product look once real competitors are in view?
+              Run a side-by-side check.
             </p>
 
             <label className="block">
@@ -356,11 +374,103 @@ export default function PriceTrendsPage() {
                           {latestAnalysis.recommendation}
                         </p>
                       </div>
+
+                      {latestAnalysis.pricing_signal ||
+                      latestAnalysis.positioning ||
+                      latestAnalysis.differentiators.length > 0 ||
+                      latestAnalysis.market_signals.length > 0 ||
+                      latestAnalysis.trend_signals.length > 0 ? (
+                        <div className="mt-4 grid gap-3">
+                          {latestAnalysis.pricing_signal ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Pricing Signal
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {latestAnalysis.pricing_signal}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {latestAnalysis.positioning ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Positioning
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {latestAnalysis.positioning}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {latestAnalysis.differentiators.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Differentiators
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {latestAnalysis.differentiators.join(" • ")}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {latestAnalysis.market_signals.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Market Signals
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {latestAnalysis.market_signals.join(" • ")}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {latestAnalysis.trend_signals.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Trend Signals
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {latestAnalysis.trend_signals.join(" • ")}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </>
                   ) : (
-                    <p className="mt-4 text-sm text-slate-500">
-                      No competitor analysis has been run for this product yet.
-                    </p>
+                    <div className="mt-4 space-y-3">
+                      <p className="text-sm text-slate-500">
+                        No product-vs-competitor analysis has been run for this product yet.
+                      </p>
+
+                      {latestMonitoringRuns.length > 0 ? (
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                            Existing competitor checks
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-sky-900">
+                            {latestMonitoringRuns.length} competitor monitoring{" "}
+                            {latestMonitoringRuns.length === 1 ? "check is" : "checks are"}{" "}
+                            already saved. You can use those tracked competitors to run the
+                            first side-by-side comparison for this product.
+                          </p>
+                          <div className="mt-3 space-y-2">
+                            {latestMonitoringRuns.slice(0, 3).map((run) => (
+                              <div
+                                key={run.id}
+                                className="rounded-lg bg-white/80 px-3 py-2 text-sm text-sky-950"
+                              >
+                                {competitorNameById.get(run.competitor_id) ??
+                                  `Competitor #${run.competitor_id}`}{" "}
+                                · {run.alert_level} alert · updated{" "}
+                                {formatTimestamp(run.updated_at)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </article>
               ))}

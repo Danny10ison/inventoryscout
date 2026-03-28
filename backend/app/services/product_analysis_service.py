@@ -1,6 +1,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from urllib.parse import quote_plus
 
+from app.repositories.competitor_repository import CompetitorRepository
 from app.integrations.tinyfish_client import TinyFishClient, TinyFishConfigurationError, TinyFishError
 from app.repositories.product_analysis_repository import ProductAnalysisRepository
 from app.repositories.product_repository import ProductRepository
@@ -24,6 +26,7 @@ class ProductAnalysisService:
     def __init__(self, db: Session) -> None:
         self.user_repository = UserRepository(db)
         self.product_repository = ProductRepository(db)
+        self.competitor_repository = CompetitorRepository(db)
         self.repository = ProductAnalysisRepository(db)
 
     def _ensure_user_exists(self, user_id: int) -> None:
@@ -61,36 +64,28 @@ class ProductAnalysisService:
         self._get_product_or_404(user_id, product_id)
         return self._get_analysis_or_404(user_id, product_id, analysis_id)
 
-    def _run_tinyfish_product_analysis(
+    def _run_tinyfish_competitor_market_analysis(
         self,
         product,
+        competitor,
         analysis_goal: str | None,
     ) -> LiveSourceResult:
         fetched_at = utcnow()
-        if not product.url:
-            return LiveSourceResult(
-                provider="tinyfish",
-                source_type="product_page",
-                source_url="",
-                status="failed",
-                fetched_at=fetched_at,
-                raw_payload=None,
-                normalized_payload={},
-                error_code="missing_url",
-                error_message="Product URL is required for live product analysis.",
-            )
-
         goal = (
-            "Analyze this product page for market opportunity. Return JSON with these keys: "
-            "summary, target_customer, key_features, demand_signals, trend_signals, "
-            "competitive_signals, risks, value_proposition. "
-            "Keep arrays short and factual."
+            "Analyze this competitor product page to judge whether the user's product is worth selling in this market. "
+            "Return JSON with these keys: summary, value_proposition, key_features, demand_signals, trend_signals, "
+            "competitive_signals, risks. Keep arrays short and factual. "
+            f"User product name: {product.name}. "
         )
+        if product.category:
+            goal = f"{goal}User product category: {product.category}. "
+        if product.description:
+            goal = f"{goal}User product description: {product.description}. "
         if analysis_goal:
-            goal = f"{goal} Focus on this user goal: {analysis_goal}."
+            goal = f"{goal}Focus on this user goal: {analysis_goal}."
 
         try:
-            raw_payload = TinyFishClient().run_automation(url=product.url, goal=goal)
+            raw_payload = TinyFishClient().run_automation(url=competitor.url, goal=goal)
             normalized_payload = {
                 "summary": str(raw_payload.get("summary")).strip()
                 if str(raw_payload.get("summary", "")).strip()
@@ -106,8 +101,8 @@ class ProductAnalysisService:
             }
             return LiveSourceResult(
                 provider="tinyfish",
-                source_type="product_page",
-                source_url=str(product.url),
+                source_type="competitor_page",
+                source_url=str(competitor.url),
                 status="completed",
                 fetched_at=fetched_at,
                 raw_payload=raw_payload,
@@ -116,8 +111,8 @@ class ProductAnalysisService:
         except TinyFishConfigurationError as exc:
             return LiveSourceResult(
                 provider="tinyfish",
-                source_type="product_page",
-                source_url=str(product.url),
+                source_type="competitor_page",
+                source_url=str(competitor.url),
                 status="failed",
                 fetched_at=fetched_at,
                 raw_payload=None,
@@ -128,8 +123,83 @@ class ProductAnalysisService:
         except TinyFishError as exc:
             return LiveSourceResult(
                 provider="tinyfish",
-                source_type="product_page",
-                source_url=str(product.url),
+                source_type="competitor_page",
+                source_url=str(competitor.url),
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_request_failed",
+                error_message=str(exc),
+            )
+
+    def _run_tinyfish_market_search(
+        self,
+        product,
+        analysis_goal: str | None,
+    ) -> LiveSourceResult:
+        fetched_at = utcnow()
+        search_query = " ".join(
+            part
+            for part in [product.name, product.category or "", "buy online"]
+            if str(part).strip()
+        ).strip()
+        goal = (
+            "Search the web for this product and inspect the top 3 relevant competitor or marketplace product pages. "
+            "Return JSON with these keys: summary, value_proposition, key_features, demand_signals, trend_signals, "
+            "competitive_signals, risks. Keep arrays short and factual. "
+            f"User product name: {product.name}. "
+        )
+        if product.category:
+            goal = f"{goal}User product category: {product.category}. "
+        if product.description:
+            goal = f"{goal}User product description: {product.description}. "
+        if analysis_goal:
+            goal = f"{goal}Focus on this user goal: {analysis_goal}."
+
+        search_url = f"https://www.google.com/search?q={quote_plus(search_query)}"
+
+        try:
+            raw_payload = TinyFishClient().run_automation(url=search_url, goal=goal)
+            normalized_payload = {
+                "summary": str(raw_payload.get("summary")).strip()
+                if str(raw_payload.get("summary", "")).strip()
+                else None,
+                "value_proposition": str(raw_payload.get("value_proposition")).strip()
+                if str(raw_payload.get("value_proposition", "")).strip()
+                else None,
+                "key_features": ensure_string_list(raw_payload.get("key_features", [])),
+                "demand_signals": ensure_string_list(raw_payload.get("demand_signals", [])),
+                "trend_signals": ensure_string_list(raw_payload.get("trend_signals", [])),
+                "competitive_signals": ensure_string_list(raw_payload.get("competitive_signals", [])),
+                "risks": ensure_string_list(raw_payload.get("risks", [])),
+            }
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="market_search",
+                source_url=search_url,
+                status="completed",
+                fetched_at=fetched_at,
+                raw_payload=raw_payload,
+                normalized_payload=normalized_payload,
+            )
+        except TinyFishConfigurationError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="market_search",
+                source_url=search_url,
+                status="failed",
+                fetched_at=fetched_at,
+                raw_payload=None,
+                normalized_payload={},
+                error_code="provider_not_configured",
+                error_message=str(exc),
+            )
+        except TinyFishError as exc:
+            return LiveSourceResult(
+                provider="tinyfish",
+                source_type="market_search",
+                source_url=search_url,
                 status="failed",
                 fetched_at=fetched_at,
                 raw_payload=None,
@@ -141,33 +211,91 @@ class ProductAnalysisService:
     def create_analysis(self, user_id: int, product_id: int, payload: ProductAnalysisCreate):
         self._ensure_user_exists(user_id)
         product = self._get_product_or_404(user_id, product_id)
-        source_result = self._run_tinyfish_product_analysis(product, payload.analysis_goal)
-        evidence_results = [source_result]
+        competitors = self.competitor_repository.list_by_user_id(user_id)
+        evidence_results: list[LiveSourceResult] = []
+
+        if competitors:
+            evidence_results.extend(
+                self._run_tinyfish_competitor_market_analysis(product, competitor, payload.analysis_goal)
+                for competitor in competitors
+            )
+        else:
+            evidence_results.append(
+                self._run_tinyfish_market_search(product, payload.analysis_goal)
+            )
 
         has_description = bool(product.description and product.description.strip())
         has_category = bool(product.category and product.category.strip())
-        has_url = bool(product.url and str(product.url).strip())
-        completeness_score = sum([has_description, has_category, has_url])
+        completeness_score = sum([has_description, has_category])
 
-        live_payload = source_result.normalized_payload if source_result.status == "completed" else {}
-        demand_signals = ensure_string_list(live_payload.get("demand_signals", []))
-        trend_signals = ensure_string_list(live_payload.get("trend_signals", []))
-        competitive_signals = ensure_string_list(live_payload.get("competitive_signals", []))
-        extracted_risks = ensure_string_list(live_payload.get("risks", []))
-        extracted_summary = live_payload.get("summary") if isinstance(live_payload.get("summary"), str) else None
-        value_proposition = (
-            live_payload.get("value_proposition")
-            if isinstance(live_payload.get("value_proposition"), str)
-            else None
+        completed_payloads = [
+            result.normalized_payload for result in evidence_results if result.status == "completed"
+        ]
+
+        demand_signals = list(
+            dict.fromkeys(
+                str(item).strip()
+                for payload_item in completed_payloads
+                for item in ensure_string_list(payload_item.get("demand_signals", []))
+                if str(item).strip()
+            )
         )
-        key_features = ensure_string_list(live_payload.get("key_features", []))
+        trend_signals = list(
+            dict.fromkeys(
+                str(item).strip()
+                for payload_item in completed_payloads
+                for item in ensure_string_list(payload_item.get("trend_signals", []))
+                if str(item).strip()
+            )
+        )
+        competitive_signals = list(
+            dict.fromkeys(
+                str(item).strip()
+                for payload_item in completed_payloads
+                for item in ensure_string_list(payload_item.get("competitive_signals", []))
+                if str(item).strip()
+            )
+        )
+        extracted_risks = list(
+            dict.fromkeys(
+                str(item).strip()
+                for payload_item in completed_payloads
+                for item in ensure_string_list(payload_item.get("risks", []))
+                if str(item).strip()
+            )
+        )
+        extracted_summary = next(
+            (
+                payload_item.get("summary")
+                for payload_item in completed_payloads
+                if isinstance(payload_item.get("summary"), str) and str(payload_item.get("summary")).strip()
+            ),
+            None,
+        )
+        value_proposition = next(
+            (
+                payload_item.get("value_proposition")
+                for payload_item in completed_payloads
+                if isinstance(payload_item.get("value_proposition"), str)
+                and str(payload_item.get("value_proposition")).strip()
+            ),
+            None,
+        )
+        key_features = list(
+            dict.fromkeys(
+                str(item).strip()
+                for payload_item in completed_payloads
+                for item in ensure_string_list(payload_item.get("key_features", []))
+                if str(item).strip()
+            )
+        )
         sources_used, sources_failed = summarize_source_health(evidence_results)
         signal_count = len(demand_signals) + len(trend_signals) + len(competitive_signals)
         confidence_score = determine_confidence_score(
             completed_sources=len(sources_used),
             failed_sources=len(sources_failed),
             signal_count=signal_count,
-            has_primary_url=has_url,
+            has_primary_url=False,
         )
         confidence_level = determine_confidence_level(confidence_score)
         data_freshness = determine_data_freshness(evidence_results)
@@ -177,8 +305,6 @@ class ProductAnalysisService:
             demand_outlook = "Promising"
         elif len(demand_signals) + len(trend_signals) >= 2:
             demand_outlook = "Needs validation"
-        elif completeness_score == 3:
-            demand_outlook = "Promising"
         elif completeness_score == 2:
             demand_outlook = "Needs validation"
         else:
@@ -193,17 +319,27 @@ class ProductAnalysisService:
         else:
             competition_level = "Unknown"
 
-        if source_result.status == "completed" and completeness_score >= 2:
+        if completed_payloads and (has_description or has_category):
             market_readiness = "High"
+        elif completed_payloads:
+            market_readiness = "Medium"
         elif completeness_score == 2:
             market_readiness = "Medium"
         else:
             market_readiness = "Early"
 
-        summary = extracted_summary or (
-            f"{product.name} shows {market_readiness.lower()} market readiness based on the current "
-            "product information available in InventoryScout."
-        )
+        if extracted_summary:
+            summary = str(extracted_summary).strip()
+        elif competitors:
+            summary = (
+                f"{product.name} was assessed against {len(competitors)} saved competitor "
+                f"{'page' if len(competitors) == 1 else 'pages'} to estimate market viability."
+            )
+        else:
+            summary = (
+                f"{product.name} shows {market_readiness.lower()} market readiness based on the current "
+                "product information available in InventoryScout."
+            )
 
         strengths = [
             f"{product.name} is now stored as a reusable product record for repeatable analysis.",
@@ -221,9 +357,7 @@ class ProductAnalysisService:
             gaps.append("Add a richer product description to improve positioning and value analysis.")
         if not has_category:
             gaps.append("Assign a product category to support cleaner market and competitor comparisons.")
-        if not has_url:
-            gaps.append("Add a product URL so later analysis can compare page-level details and messaging.")
-        if not demand_signals and has_url:
+        if not demand_signals:
             gaps.append("Demand signals are still thin, so this product needs stronger external validation.")
         if not gaps:
             gaps.append("The core product fields are present, so the next gap is external market validation.")
@@ -231,36 +365,39 @@ class ProductAnalysisService:
         risks = [
             "Use confidence, freshness, and source coverage before treating this run as final market evidence.",
         ]
-        if source_result.status != "completed":
+        if not completed_payloads:
             risks.insert(
                 0,
                 "Live product extraction did not fully complete, so this run is only partially backed by external evidence.",
             )
         else:
             risks.extend(str(risk) for risk in extracted_risks[:3] if str(risk).strip())
-        if not has_url:
-            risks.append("Missing a product URL limits direct page comparison and content extraction.")
-
         next_steps = [
             "Run competitor analysis with selected saved competitors for deeper positioning insight.",
             "Enrich this product with more descriptive attributes before connecting live analysis providers.",
         ]
-        if has_url:
-            next_steps.append("Use the product URL as an input for future extraction and comparison workflows.")
         if trend_signals:
             next_steps.append("Validate the extracted trend signals with recent external sources and pricing checks.")
+        if not competitors:
+            next_steps.insert(0, "Add saved competitors if you want direct side-by-side checks instead of search-based market discovery.")
 
         goal_suffix = f" Focus area: {payload.analysis_goal}." if payload.analysis_goal else ""
-        recommendation = (
-            f"Use this product profile as the starting point for market validation and competitor benchmarking."
-            f"{goal_suffix}"
-        )
+        if not competitors:
+            recommendation = (
+                "This run used TinyFish web search to inspect top market results. Add saved competitors for tighter side-by-side checks."
+                f"{goal_suffix}"
+            )
+        else:
+            recommendation = (
+                f"Use this product profile as the starting point for market validation and competitor benchmarking."
+                f"{goal_suffix}"
+            )
 
         demand_score = clamp_score(20 + (len(demand_signals) * 14) + (len(trend_signals) * 10))
         competition_score = clamp_score(
-            15 + (len(competitive_signals) * 16) + (10 if has_category else 0) + (10 if has_url else 0)
+            15 + (len(competitive_signals) * 16) + (10 if has_category else 0)
         )
-        trend_score = clamp_score(15 + (len(trend_signals) * 18) + (15 if source_result.status == "completed" else 0))
+        trend_score = clamp_score(15 + (len(trend_signals) * 18) + (15 if completed_payloads else 0))
         opportunity_score = clamp_score(
             20 + (confidence_score // 2) + (10 if has_description else 0) + (10 if has_category else 0)
         )
@@ -274,6 +411,11 @@ class ProductAnalysisService:
             status=run_status,
             analysis_goal=payload.analysis_goal,
             summary=summary,
+            value_proposition=value_proposition if isinstance(value_proposition, str) else None,
+            key_features=key_features,
+            demand_signals=demand_signals,
+            trend_signals=trend_signals,
+            competitive_signals=competitive_signals,
             market_readiness=market_readiness,
             demand_outlook=demand_outlook,
             competition_level=competition_level,

@@ -196,7 +196,7 @@ export default function SentimentPage() {
       <PageHeader
         badge="Intelligence"
         title="Recommendations"
-        description="This view turns your latest product and competitor analysis runs into a live action board so the next move is easier to spot."
+        description="Latest actions."
       />
 
       <MetricCards

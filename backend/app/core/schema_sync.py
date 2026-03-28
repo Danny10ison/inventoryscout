@@ -8,6 +8,11 @@ def sync_sqlite_schema(engine: Engine) -> None:
 
     column_statements = {
         "product_analyses": {
+            "value_proposition": "ALTER TABLE product_analyses ADD COLUMN value_proposition TEXT",
+            "key_features": "ALTER TABLE product_analyses ADD COLUMN key_features JSON NOT NULL DEFAULT '[]'",
+            "demand_signals": "ALTER TABLE product_analyses ADD COLUMN demand_signals JSON NOT NULL DEFAULT '[]'",
+            "trend_signals": "ALTER TABLE product_analyses ADD COLUMN trend_signals JSON NOT NULL DEFAULT '[]'",
+            "competitive_signals": "ALTER TABLE product_analyses ADD COLUMN competitive_signals JSON NOT NULL DEFAULT '[]'",
             "demand_score": "ALTER TABLE product_analyses ADD COLUMN demand_score INTEGER NOT NULL DEFAULT 0",
             "competition_score": "ALTER TABLE product_analyses ADD COLUMN competition_score INTEGER NOT NULL DEFAULT 0",
             "trend_score": "ALTER TABLE product_analyses ADD COLUMN trend_score INTEGER NOT NULL DEFAULT 0",
@@ -22,6 +27,11 @@ def sync_sqlite_schema(engine: Engine) -> None:
             "scoring_version": "ALTER TABLE product_analyses ADD COLUMN scoring_version VARCHAR NOT NULL DEFAULT 'v2-live'",
         },
         "competitor_analyses": {
+            "positioning": "ALTER TABLE competitor_analyses ADD COLUMN positioning TEXT",
+            "pricing_signal": "ALTER TABLE competitor_analyses ADD COLUMN pricing_signal TEXT",
+            "differentiators": "ALTER TABLE competitor_analyses ADD COLUMN differentiators JSON NOT NULL DEFAULT '[]'",
+            "market_signals": "ALTER TABLE competitor_analyses ADD COLUMN market_signals JSON NOT NULL DEFAULT '[]'",
+            "trend_signals": "ALTER TABLE competitor_analyses ADD COLUMN trend_signals JSON NOT NULL DEFAULT '[]'",
             "competition_score": "ALTER TABLE competitor_analyses ADD COLUMN competition_score INTEGER NOT NULL DEFAULT 0",
             "positioning_score": "ALTER TABLE competitor_analyses ADD COLUMN positioning_score INTEGER NOT NULL DEFAULT 0",
             "pricing_pressure_score": "ALTER TABLE competitor_analyses ADD COLUMN pricing_pressure_score INTEGER NOT NULL DEFAULT 0",

@@ -14,6 +14,11 @@ class ProductAnalysisOut(BaseModel):
     status: str
     analysis_goal: str | None
     summary: str
+    value_proposition: str | None
+    key_features: list[str]
+    demand_signals: list[str]
+    trend_signals: list[str]
+    competitive_signals: list[str]
     market_readiness: str
     demand_outlook: str
     competition_level: str

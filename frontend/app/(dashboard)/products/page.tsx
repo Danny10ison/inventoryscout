@@ -22,7 +22,6 @@ import {
 
 type ProductFormState = {
   name: string;
-  url: string;
   mainCategory: string;
   subcategory: string;
   description: string;
@@ -33,7 +32,6 @@ function toProductForm(product: Product): ProductFormState {
 
   return {
     name: product.name,
-    url: product.url ?? "",
     mainCategory,
     subcategory,
     description: product.description ?? "",
@@ -59,7 +57,6 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<ProductFormState>({
     name: "",
-    url: "",
     mainCategory: "",
     subcategory: "",
     description: "",
@@ -114,7 +111,6 @@ export default function ProductsPage() {
     setEditingProduct(null);
     setEditForm({
       name: "",
-      url: "",
       mainCategory: "",
       subcategory: "",
       description: "",
@@ -166,7 +162,6 @@ export default function ProductsPage() {
     try {
       const updatedProduct = await updateProduct(user.id, editingProduct.id, {
         name: editForm.name.trim(),
-        url: editForm.url.trim() || null,
         category:
           combineCategory(editForm.mainCategory, editForm.subcategory) || null,
         description: editForm.description.trim() || null,
@@ -195,7 +190,7 @@ export default function ProductsPage() {
   ).size;
 
   const insightReadyCount = products.filter(
-    (product) => Boolean(product.url) || Boolean(product.description),
+    (product) => Boolean(product.category) || Boolean(product.description),
   ).length;
 
   return (
@@ -242,7 +237,7 @@ export default function ProductsPage() {
                 <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {["Name", "Category", "URL", "Updated", "Actions"].map(
+                      {["Name", "Category", "Updated", "Actions"].map(
                         (column) => (
                           <th
                             key={column}
@@ -258,7 +253,7 @@ export default function ProductsPage() {
                     {products.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={4}
                           className="px-4 py-6 text-center text-slate-500"
                         >
                           No products yet. Add the first item you want to
@@ -276,20 +271,6 @@ export default function ProductsPage() {
                           <td className="px-4 py-3 text-slate-800">{product.name}</td>
                           <td className="px-4 py-3 text-slate-700">
                             {product.category ?? "Uncategorized"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {product.url ? (
-                              <a
-                                href={product.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-sky-700 underline"
-                              >
-                                {product.url}
-                              </a>
-                            ) : (
-                              "No URL"
-                            )}
                           </td>
                           <td className="px-4 py-3 text-slate-700">
                             {formatTimestamp(product.updated_at)}
@@ -417,14 +398,6 @@ export default function ProductsPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="block lg:col-span-2">
-                <span className="text-sm font-medium text-slate-700">URL</span>
-                <input
-                  value={editForm.url}
-                  onChange={handleEditChange("url")}
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:bg-white"
-                />
               </label>
               <label className="block lg:col-span-2">
                 <span className="text-sm font-medium text-slate-700">Description</span>

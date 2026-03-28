@@ -160,6 +160,11 @@ class CompetitorAnalysisService:
             for result in successful_results
             if str(result.normalized_payload.get("pricing_signal", "")).strip()
         ]
+        positionings = [
+            str(result.normalized_payload.get("positioning")).strip()
+            for result in successful_results
+            if str(result.normalized_payload.get("positioning", "")).strip()
+        ]
         differentiators = [
             str(item).strip()
             for result in successful_results
@@ -189,7 +194,7 @@ class CompetitorAnalysisService:
             completed_sources=len(sources_used),
             failed_sources=len(sources_failed),
             signal_count=len(pricing_signals) + len(differentiators) + len(market_signals) + len(trend_signals),
-            has_primary_url=bool(product.url),
+            has_primary_url=False,
         )
         confidence_level = determine_confidence_level(confidence_score)
         data_freshness = determine_data_freshness(evidence_results)
@@ -241,9 +246,6 @@ class CompetitorAnalysisService:
         if sources_failed:
             risks.append("Some competitor sources failed, so pricing and positioning coverage is incomplete.")
 
-        if not product.url:
-            risks.append("The product does not yet have a URL, which limits direct page-level comparison.")
-
         recommendation = (
             f"Prioritize comparing {product.name} against {competitor_names[0]} first, "
             "then use the strongest pricing and market signals to refine positioning."
@@ -266,6 +268,11 @@ class CompetitorAnalysisService:
             analysis_goal=payload.analysis_goal,
             summary=summary,
             market_position=market_position,
+            positioning=positionings[0] if positionings else None,
+            pricing_signal=pricing_signals[0] if pricing_signals else None,
+            differentiators=differentiators,
+            market_signals=market_signals,
+            trend_signals=trend_signals,
             competition_score=competition_score,
             positioning_score=positioning_score,
             pricing_pressure_score=pricing_pressure_score,

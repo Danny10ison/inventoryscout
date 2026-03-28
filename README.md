@@ -79,7 +79,7 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-- Add TINYFISH_API_KEY to environment
+- Add TINYFISH_API_KEY to backend environment
 
 - Run backend api
 ```bash
@@ -93,7 +93,7 @@ http://localhost:8000/docs
 
 Frontend Setup
 
-- Add NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 to environment
+- Add NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 to frontend environment
 
 - Install dependencies
 ```bash

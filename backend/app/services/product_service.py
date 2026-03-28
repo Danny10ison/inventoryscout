@@ -38,7 +38,6 @@ class ProductService:
 
     def create_product(self, user_id: int, payload: ProductCreate):
         self._ensure_user_exists(user_id)
-        normalized_url = str(payload.url) if payload.url is not None else None
 
         if self.repository.get_by_user_and_name(user_id, payload.name):
             raise HTTPException(
@@ -46,17 +45,10 @@ class ProductService:
                 detail="Product name already exists for this user",
             )
 
-        if normalized_url and self.repository.get_by_user_and_url(user_id, normalized_url):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Product URL already exists for this user",
-            )
-
         try:
             return self.repository.create(
                 user_id=user_id,
                 name=payload.name,
-                url=normalized_url,
                 category=payload.category,
                 description=payload.description,
             )
@@ -72,9 +64,6 @@ class ProductService:
         product = self._get_product_or_404(user_id, product_id)
         update_data = payload.model_dump(exclude_unset=True)
 
-        if "url" in update_data and update_data["url"] is not None:
-            update_data["url"] = str(update_data["url"])
-
         if "name" in update_data and update_data["name"] != product.name:
             existing_product = self.repository.get_by_user_and_name(user_id, update_data["name"])
             if existing_product and existing_product.id != product_id:
@@ -82,16 +71,6 @@ class ProductService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Product name already exists for this user",
                 )
-
-        if "url" in update_data and update_data["url"] != product.url:
-            updated_url = update_data["url"]
-            if updated_url:
-                existing_product = self.repository.get_by_user_and_url(user_id, updated_url)
-                if existing_product and existing_product.id != product_id:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Product URL already exists for this user",
-                    )
 
         try:
             return self.repository.update(product, **update_data)

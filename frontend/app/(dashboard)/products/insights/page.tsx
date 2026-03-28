@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AiRunTracker } from "@/components/dashboard/ai-run-tracker";
 import { PageHeader, Panel } from "@/components/dashboard/ui";
@@ -12,6 +13,7 @@ import {
 import {
   ensureAuthenticatedUser,
   InventoryScoutApiError,
+  listCompetitors,
   listProductAnalyses,
   listProducts,
   Product,
@@ -26,8 +28,10 @@ type ProductWithAnalysis = {
 };
 
 export default function ProductInsightsPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [productAnalyses, setProductAnalyses] = useState<ProductWithAnalysis[]>([]);
+  const [competitorCount, setCompetitorCount] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedGoal, setSelectedGoal] = useState(productAnalysisGoalOptions[0].value);
   const [customGoal, setCustomGoal] = useState("");
@@ -41,7 +45,10 @@ export default function ProductInsightsPage() {
     async function loadInsights() {
       try {
         const currentUser = await ensureAuthenticatedUser();
-        const products = await listProducts(currentUser.id);
+        const [products, competitors] = await Promise.all([
+          listProducts(currentUser.id),
+          listCompetitors(currentUser.id),
+        ]);
         const analyses = await Promise.all(
           products.map(async (product) => {
             const analysisHistory = await listProductAnalyses(currentUser.id, product.id);
@@ -53,6 +60,7 @@ export default function ProductInsightsPage() {
         );
 
         setUser(currentUser);
+        setCompetitorCount(competitors.length);
         setProductAnalyses(analyses);
       } catch (loadError) {
         setError(
@@ -93,23 +101,30 @@ export default function ProductInsightsPage() {
       return;
     }
 
+    if (competitorCount === 0) {
+      setError("Add a competitor before running this check.");
+      setSelectedProduct(null);
+      router.push("/competitors/new");
+      return;
+    }
+
     setIsRunning(true);
     setError(null);
     setFeedback(null);
     startRun({
       title: `Analyzing ${selectedProduct.name}`,
-      subtitle: "The UI is reflecting the backend analysis phases in real time while the request completes.",
-      currentMessage: "Preparing the saved product record for a fresh analysis run.",
+      subtitle: "Tracking the market check while the backend completes the run.",
+      currentMessage: "Preparing the saved product record for analysis.",
       stages: [
         {
           id: "validate",
           title: "Validate Product",
-          description: "Check the saved product record, URL, category, and description context.",
+          description: "Check the saved product record, category, and description context.",
         },
         {
           id: "extract",
           title: "Extract Signals",
-          description: "Run the TinyFish-backed page extraction and collect market signals when available.",
+          description: "Run TinyFish against competitor pages and collect market signals.",
         },
         {
           id: "evidence",
@@ -170,7 +185,7 @@ export default function ProductInsightsPage() {
         <PageHeader
           badge="Products"
           title="Insights"
-          description="Run an AI check on a saved product and get a simple read on demand, risk, and what to do next."
+          description="Run a product check."
         />
 
         <Panel title="Recent Analysis Runs">
@@ -293,6 +308,14 @@ export default function ProductInsightsPage() {
                         </p>
 
                         <div className="mt-4 space-y-2 text-sm text-slate-600">
+                          {latestAnalysis.value_proposition ? (
+                            <p>
+                              Value:{" "}
+                              <span className="font-medium text-slate-900">
+                                {latestAnalysis.value_proposition}
+                              </span>
+                            </p>
+                          ) : null}
                           <p>
                             Recommendation:{" "}
                             <span className="font-medium text-slate-900">
@@ -312,6 +335,28 @@ export default function ProductInsightsPage() {
                             </span>
                           </p>
                         </div>
+
+                        {latestAnalysis.key_features.length > 0 ? (
+                          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Key Features
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-slate-700">
+                              {latestAnalysis.key_features.join(" • ")}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {latestAnalysis.demand_signals.length > 0 ? (
+                          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Demand Signals
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-slate-700">
+                              {latestAnalysis.demand_signals.join(" • ")}
+                            </p>
+                          </div>
+                        ) : null}
                       </article>
                     ))}
                 </div>
@@ -364,6 +409,24 @@ export default function ProductInsightsPage() {
               </div>
             ) : (
               <>
+                {competitorCount === 0 ? (
+                  <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-700">
+                      Add a competitor
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-rose-900">
+                      Product checks work best when you already have a competitor saved.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/competitors/new")}
+                      className="mt-3 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Add Competitor
+                    </button>
+                  </div>
+                ) : null}
+
                 <label className="mt-5 block">
                   <span className="text-sm font-medium text-slate-700">Goal</span>
                   <select
@@ -402,7 +465,7 @@ export default function ProductInsightsPage() {
                   <button
                     type="button"
                     onClick={() => void handleRunAnalysis()}
-                    disabled={isRunning}
+                    disabled={isRunning || competitorCount === 0}
                     className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunning ? "Running..." : "Run"}

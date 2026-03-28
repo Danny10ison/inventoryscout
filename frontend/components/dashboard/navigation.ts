@@ -32,9 +32,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
   {
     title: "Intelligence",
     items: [
-      { label: "Demand Signals", href: "/intelligence/demand-trends" },
-      { label: "Competitor Analysis", href: "/intelligence/price-trends" },
-      { label: "Recommendations", href: "/intelligence/sentiment" },
+      { label: "Demand", href: "/intelligence/product-demand" },
+      { label: "Competitors", href: "/intelligence/competitor-analysis" },
+      { label: "Recommendations", href: "/intelligence/recommendations" },
     ],
   },
   {

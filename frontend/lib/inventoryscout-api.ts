@@ -28,7 +28,6 @@ export type Product = {
   id: number;
   user_id: number;
   name: string;
-  url: string | null;
   category: string | null;
   description: string | null;
   created_at: string;
@@ -51,6 +50,11 @@ export type ProductAnalysis = {
   status: string;
   analysis_goal: string | null;
   summary: string;
+  value_proposition: string | null;
+  key_features: string[];
+  demand_signals: string[];
+  trend_signals: string[];
+  competitive_signals: string[];
   market_readiness: string;
   demand_outlook: string;
   competition_level: string;
@@ -89,6 +93,11 @@ export type CompetitorAnalysis = {
   analysis_goal: string | null;
   summary: string;
   market_position: string;
+  positioning: string | null;
+  pricing_signal: string | null;
+  differentiators: string[];
+  market_signals: string[];
+  trend_signals: string[];
   competition_score: number;
   positioning_score: number;
   pricing_pressure_score: number;
@@ -199,13 +208,10 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
     let message: string;
 
-    // Handle FastAPI validation error format (detail is an array)
     if (Array.isArray(payload?.detail)) {
-      // Extract the first validation error message
       const firstError = payload.detail[0] as Record<string, unknown>;
       message = (firstError?.msg as string) || "Validation error";
     } else {
-      // Handle standard error responses
       message =
         (typeof payload?.detail === "string" ? payload.detail : null) ??
         payload?.message ??
@@ -357,7 +363,7 @@ export async function listProducts(userId: number) {
 
 export async function createProduct(
   userId: number,
-  payload: Pick<Product, "name" | "url" | "category" | "description">,
+  payload: Pick<Product, "name" | "category" | "description">,
 ) {
   return apiRequest<Product>(`/users/${userId}/products/`, {
     method: "POST",
@@ -368,7 +374,7 @@ export async function createProduct(
 export async function updateProduct(
   userId: number,
   productId: number,
-  payload: Partial<Pick<Product, "name" | "url" | "category" | "description">>,
+  payload: Partial<Pick<Product, "name" | "category" | "description">>,
 ) {
   return apiRequest<Product>(`/users/${userId}/products/${productId}`, {
     method: "PATCH",

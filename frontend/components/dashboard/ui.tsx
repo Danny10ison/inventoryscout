@@ -84,9 +84,6 @@ export function MetricCards({
           <p className="mt-1.5 text-lg font-semibold tracking-tight text-slate-950">
             {item.value}
           </p>
-          {item.note ? (
-            <p className="mt-1.5 text-xs leading-4 text-slate-500">{item.note}</p>
-          ) : null}
         </article>
       ))}
     </div>

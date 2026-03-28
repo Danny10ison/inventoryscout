@@ -1,11 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class ProductBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
-    url: HttpUrl | None = None
     category: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
 
@@ -16,7 +15,6 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
-    url: HttpUrl | None = None
     category: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
 

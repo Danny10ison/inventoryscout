@@ -22,6 +22,11 @@ class CompetitorAnalysisOut(BaseModel):
     analysis_goal: str | None
     summary: str
     market_position: str
+    positioning: str | None
+    pricing_signal: str | None
+    differentiators: list[str]
+    market_signals: list[str]
+    trend_signals: list[str]
     competition_score: int
     positioning_score: int
     pricing_pressure_score: int
